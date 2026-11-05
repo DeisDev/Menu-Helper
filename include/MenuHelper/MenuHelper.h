@@ -11,6 +11,7 @@ extern "C" {
 typedef uint32_t MenuHelper_EntryId;
 typedef uint32_t MenuHelper_MenuId;
 typedef uint32_t MenuHelper_ItemId;
+typedef uint32_t MenuHelper_ChangeId;
 #define MENUHELPER_INVALID_ID 0u
 
 enum MenuHelper_Menu {
@@ -45,6 +46,17 @@ enum MenuHelper_ItemType {
 	MENUHELPER_ITEM_SLIDER = 3    /* value in [min, max], snapped to step */
 };
 
+/* Text
+   Write labels, descriptions and stepper options in English, or as "$KEY" keys. Before showing one,
+   MenuHelper looks it up in these UTF-8 JSON files, so anyone can translate a mod later without code:
+     Data/Interface/MenuHelper/Translations/<modName>_<language>.json
+     Data/Interface/MenuHelper/Translations/<modName>_en.json
+   Each file is one object that maps the original text to its translation. <language> is the game's
+   sLanguage setting (en, de, fr, ...). Text found in neither file is shown as is, and "$KEY" text is
+   then translated by the game like vanilla labels.
+
+   modName names your mod. It is part of file names, so it may not contain \ / : * ? " < > | */
+
 /* Callbacks run on the game's UI thread while the main or pause menu is open. */
 typedef void (*MenuHelper_PressCallback)(MenuHelper_EntryId entry, uint32_t menu, void* user);
 typedef void (*MenuHelper_ItemCallback)(MenuHelper_ItemId item, float value, void* user);
@@ -52,7 +64,8 @@ typedef void (*MenuHelper_MenuCallback)(MenuHelper_MenuId menu, void* user);
 
 typedef struct MenuHelper_EntryDesc {
 	uint32_t                 structSize;   /* sizeof(MenuHelper_EntryDesc) */
-	const char*              label;        /* UTF-8 plain text. "$KEY" strings are localized by the game. */
+	const char*              modName;      /* Required. See "Text". */
+	const char*              label;        /* Required. */
 	uint32_t                 menus;        /* MenuHelper_Menu bits */
 	int32_t                  insertBefore; /* MenuHelper_VanillaEntry, or MENUHELPER_VANILLA_APPEND */
 	MenuHelper_PressCallback onPress;      /* Optional. */
@@ -62,6 +75,7 @@ typedef struct MenuHelper_EntryDesc {
 
 typedef struct MenuHelper_MenuDesc {
 	uint32_t                structSize; /* sizeof(MenuHelper_MenuDesc) */
+	const char*             modName;    /* Required. Used for the text and saved values of the menu's items. */
 	MenuHelper_MenuCallback onOpen;     /* Optional. Called before the menu is shown; item changes made here are shown. */
 	MenuHelper_MenuCallback onClose;    /* Optional. Called after the menu closes for any reason. */
 	void*                   user;
@@ -70,23 +84,39 @@ typedef struct MenuHelper_MenuDesc {
 typedef struct MenuHelper_ItemDesc {
 	uint32_t                structSize;  /* sizeof(MenuHelper_ItemDesc) */
 	uint32_t                type;        /* MenuHelper_ItemType */
-	const char*             label;       /* UTF-8 plain text. "$KEY" strings are localized by the game. */
+	const char*             label;       /* Required. */
 	const char*             description; /* Optional. Shown under the list while the item is selected. */
 	float                   value;       /* Initial value, see MenuHelper_ItemType. */
 	float                   min;         /* Slider only. */
 	float                   max;         /* Slider only. Must be greater than min. */
 	float                   step;        /* Slider only. Must be greater than 0. */
-	const char* const*      options;     /* Stepper only. optionCount UTF-8 strings. */
+	const char* const*      options;     /* Stepper only. optionCount strings. */
 	uint32_t                optionCount; /* Stepper only. At least 1. */
 	MenuHelper_MenuId       submenu;     /* Button only, optional. Opened on top after onChange returns. */
 	MenuHelper_ItemCallback onChange;    /* Optional. Buttons: on press with value 0. Others: on value change. */
 	void*                   user;
+	/* Optional, not for buttons. Saves the value under this key in
+	   Data/F4SE/Plugins/MenuHelper/Settings/<modName>.ini whenever it changes. AddItem then starts from
+	   the saved value instead of value; read it back with GetItemValue. */
+	const char*             saveKey;
 } MenuHelper_ItemDesc;
+
+/* Changes a vanilla entry of the main menu, the pause menu, or both.
+   Changes apply in the order they were made, after mod entries are placed. */
+typedef struct MenuHelper_VanillaChangeDesc {
+	uint32_t structSize; /* sizeof(MenuHelper_VanillaChangeDesc) */
+	uint32_t menus;      /* MenuHelper_Menu bits */
+	int32_t  entry;      /* MenuHelper_VanillaEntry, not MENUHELPER_VANILLA_APPEND */
+	int32_t  hidden;     /* Nonzero hides the entry. */
+	int32_t  move;       /* Rows to move the entry by. Positive moves it down. */
+} MenuHelper_VanillaChangeDesc;
 
 /* Functions may be called from any thread. Integer results are 1 on success and 0 on failure. */
 typedef struct MenuHelper_API {
 	uint32_t version;
 
+	/* When the main or pause menu would have more rows than it shows, all mod entries move into one
+	   MODS entry that opens them as a list. Players can change this in MenuHelper.ini. */
 	MenuHelper_EntryId (*AddEntry)(const MenuHelper_EntryDesc* desc);
 	int (*RemoveEntry)(MenuHelper_EntryId entry);
 	int (*SetEntryLabel)(MenuHelper_EntryId entry, const char* label);
@@ -101,6 +131,7 @@ typedef struct MenuHelper_API {
 	int (*SetItemLabel)(MenuHelper_ItemId item, const char* label);
 	int (*SetItemDescription)(MenuHelper_ItemId item, const char* description);
 	int (*SetItemEnabled)(MenuHelper_ItemId item, int enabled);
+	/* Also saves the value when the item has a saveKey. */
 	int (*SetItemValue)(MenuHelper_ItemId item, float value);
 	float (*GetItemValue)(MenuHelper_ItemId item);
 
@@ -108,6 +139,15 @@ typedef struct MenuHelper_API {
 	int (*OpenMenu)(MenuHelper_MenuId menu);
 	/* Closes the menu and every menu opened on top of it. */
 	int (*CloseMenu)(MenuHelper_MenuId menu);
+
+	MenuHelper_ChangeId (*ChangeVanillaEntry)(const MenuHelper_VanillaChangeDesc* desc);
+	int (*RemoveVanillaChange)(MenuHelper_ChangeId change);
+
+	/* Returns the translation of text for modName (see "Text"), or text itself when there is none or the
+	   game has not loaded its settings yet. A returned translation stays valid until the game exits.
+	   Use it for text you build yourself: translate a whole message with named placeholders such as
+	   "PRESSED {count}", then fill them in. */
+	const char* (*Translate)(const char* modName, const char* text);
 } MenuHelper_API;
 
 /* Exported by MenuHelper.dll. Returns NULL when the requested version is not supported. */

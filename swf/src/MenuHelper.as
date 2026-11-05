@@ -42,7 +42,6 @@ package
 		private var stack:Array = new Array();
 		private var vanillaButtons:Object;
 		private var backButton:Object;
-		private var injectedCount:uint = 0;
 
 		public function MenuHelper()
 		{
@@ -198,9 +197,8 @@ package
 			return true;
 		}
 
-		public function OnMainListInjected(count:uint):void
+		public function OnMainListInjected():void
 		{
-			this.injectedCount = count;
 			var top:Object = this.TopMenu();
 			if (top != null)
 			{
@@ -443,23 +441,15 @@ package
 			this.FindClass(GLOBAL_FUNC_CLASS).SetText(target.panel.GuideText_tf, text, false);
 		}
 
-		// Vanilla rebuilds the main list from paths MenuHelper cannot hook, so restore our entries when they vanish.
+		// Vanilla and other mods change the main list from paths MenuHelper cannot hook. Entries they add lack both markers.
 		private function onEnterFrame(event:Event):void
 		{
-			if (this.injectedCount > 0)
+			for each (var entry:Object in this.menu.MainPanel_mc.List_mc.entryList)
 			{
-				var entries:Array = this.menu.MainPanel_mc.List_mc.entryList;
-				var injected:uint = 0;
-				for each (var entry:Object in entries)
-				{
-					if (entry != null && entry.menuHelperId != undefined)
-					{
-						++injected;
-					}
-				}
-				if (injected < this.injectedCount && entries.length > injected)
+				if (entry != null && entry.menuHelperId == undefined && entry.menuHelperVanilla == undefined)
 				{
 					this.codeObj.InjectMainEntries();
+					break;
 				}
 			}
 			var top:Object = this.TopMenu();

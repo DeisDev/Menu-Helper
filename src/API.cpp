@@ -3,6 +3,7 @@
 #include "Injector.h"
 #include "Registry.h"
 #include "Submenus.h"
+#include "Translations.h"
 
 namespace
 {
@@ -116,6 +117,27 @@ namespace
 		return MenuHelper::Submenus::RequestClose(a_menu);
 	}
 
+	MenuHelper_ChangeId ChangeVanillaEntry(const MenuHelper_VanillaChangeDesc* a_desc)
+	{
+		const auto desc = ReadDesc(a_desc);
+		const auto id = desc ? Registry::Get().AddVanillaChange(*desc) : MENUHELPER_INVALID_ID;
+		RefreshEntriesIf(id != MENUHELPER_INVALID_ID);
+		return id;
+	}
+
+	int RemoveVanillaChange(MenuHelper_ChangeId a_change)
+	{
+		return RefreshEntriesIf(Registry::Get().RemoveVanillaChange(a_change));
+	}
+
+	const char* Translate(const char* a_modName, const char* a_text)
+	{
+		if (!a_modName || !a_text || !MenuHelper::Translations::IsValidModName(a_modName)) {
+			return a_text;
+		}
+		return MenuHelper::Translations::Lookup(a_modName, a_text).data();
+	}
+
 	constexpr MenuHelper_API g_api{
 		.version = MENUHELPER_API_VERSION,
 		.AddEntry = AddEntry,
@@ -133,6 +155,9 @@ namespace
 		.GetItemValue = GetItemValue,
 		.OpenMenu = OpenMenu,
 		.CloseMenu = CloseMenu,
+		.ChangeVanillaEntry = ChangeVanillaEntry,
+		.RemoveVanillaChange = RemoveVanillaChange,
+		.Translate = Translate,
 	};
 }
 

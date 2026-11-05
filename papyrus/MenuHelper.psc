@@ -1,9 +1,14 @@
 Scriptname MenuHelper Native Hidden
 {Adds entries and submenus to the pause menu. Requires MenuHelper.dll.}
 
-; Papyrus only runs in a loaded game, so Papyrus entries appear in the pause menu only.
+; Papyrus only runs in a loaded game, so Papyrus entries and changes apply to the pause menu only.
 ; Everything created here is removed when a game is loaded or started. Register again
 ; from OnInit and after every game load (for example from OnPlayerLoadGame).
+;
+; asModName names your mod. Labels, descriptions and options are looked up in
+; Data/Interface/MenuHelper/Translations/<asModName>_<language>.json, so anyone can translate
+; your menu later. Items with asSaveKey keep their value in
+; Data/F4SE/Plugins/MenuHelper/Settings/<asModName>.ini; read it back with GetItemValue.
 ;
 ; Events, sent to every script that called RegisterForExternalEvent(eventName, "MyCallback"):
 ;   "MenuHelper_OnEntryPress"   Function MyCallback(int aiEntry)
@@ -16,18 +21,19 @@ Scriptname MenuHelper Native Hidden
 ; IDs are always greater than 0. Functions return 0 or False when they fail.
 
 ; aiInsertBefore is a vanilla entry index (10 = QUIT, 8 = SETTINGS), or -1 to add at the end.
-int Function AddEntry(string asLabel, int aiSubmenu = 0, int aiInsertBefore = 10) global native
+int Function AddEntry(string asModName, string asLabel, int aiSubmenu = 0, int aiInsertBefore = 10) global native
 bool Function RemoveEntry(int aiEntry) global native
 bool Function SetEntryLabel(int aiEntry, string asLabel) global native
 bool Function SetEntryEnabled(int aiEntry, bool abEnabled) global native
 
-int Function CreateMenu() global native
+int Function CreateMenu(string asModName) global native
 bool Function DestroyMenu(int aiMenu) global native
 
 int Function AddButton(int aiMenu, string asLabel, string asDescription = "", int aiSubmenu = 0) global native
-int Function AddCheckbox(int aiMenu, string asLabel, bool abChecked, string asDescription = "") global native
-int Function AddStepper(int aiMenu, string asLabel, string[] asOptions, int aiIndex, string asDescription = "") global native
-int Function AddSlider(int aiMenu, string asLabel, float afValue, float afMin, float afMax, float afStep, string asDescription = "") global native
+int Function AddCheckbox(int aiMenu, string asLabel, bool abChecked, string asDescription = "", string asSaveKey = "") global native
+; asOptions must not be None: passing None crashes the game.
+int Function AddStepper(int aiMenu, string asLabel, string[] asOptions, int aiIndex, string asDescription = "", string asSaveKey = "") global native
+int Function AddSlider(int aiMenu, string asLabel, float afValue, float afMin, float afMax, float afStep, string asDescription = "", string asSaveKey = "") global native
 bool Function RemoveItem(int aiItem) global native
 
 bool Function SetItemLabel(int aiItem, string asLabel) global native
@@ -39,3 +45,13 @@ float Function GetItemValue(int aiItem) global native
 ; Opens a menu on top of the open pause menu.
 bool Function OpenMenu(int aiMenu) global native
 bool Function CloseMenu(int aiMenu) global native
+
+; Hides a vanilla pause menu entry (aiEntry as in AddEntry) or moves it by aiMove rows; positive moves down.
+int Function ChangeVanillaEntry(int aiEntry, bool abHidden, int aiMove = 0) global native
+bool Function RemoveVanillaChange(int aiChange) global native
+
+; Returns the translation of asText, or asText itself.
+string Function Translate(string asModName, string asText) global native
+; Replaces every {asName} in asText with asValue. Translate first, then fill in, for example:
+; FillPlaceholder(Translate("MyMod", "PRESSED {count}"), "count", 3)
+string Function FillPlaceholder(string asText, string asName, string asValue) global native

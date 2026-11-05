@@ -1,6 +1,7 @@
 #include "Papyrus.h"
 
 #include "API.h"
+#include "Translations.h"
 
 namespace MenuHelper::Papyrus
 {
@@ -12,9 +13,10 @@ namespace MenuHelper::Papyrus
 		constexpr auto kMenuOpenEvent = "MenuHelper_OnMenuOpen"sv;
 		constexpr auto kMenuCloseEvent = "MenuHelper_OnMenuClose"sv;
 
-		std::mutex                     g_lock;
-		std::vector<MenuHelper_EntryId> g_entries;
-		std::vector<MenuHelper_MenuId>  g_menus;
+		std::mutex                       g_lock;
+		std::vector<MenuHelper_EntryId>  g_entries;
+		std::vector<MenuHelper_MenuId>   g_menus;
+		std::vector<MenuHelper_ChangeId> g_changes;
 
 		const MenuHelper_API& Api()
 		{
@@ -51,11 +53,13 @@ namespace MenuHelper::Papyrus
 			return a_id > 0 ? static_cast<std::uint32_t>(a_id) : MENUHELPER_INVALID_ID;
 		}
 
-		std::int32_t AddEntry(std::monostate, std::string_view a_label, std::int32_t a_submenu, std::int32_t a_insertBefore)
+		std::int32_t AddEntry(std::monostate, std::string_view a_modName, std::string_view a_label, std::int32_t a_submenu, std::int32_t a_insertBefore)
 		{
+			const std::string    modName{ a_modName };
 			const std::string    label{ a_label };
 			MenuHelper_EntryDesc desc{};
 			desc.structSize = sizeof(desc);
+			desc.modName = modName.c_str();
 			desc.label = label.c_str();
 			desc.menus = MENUHELPER_MENU_PAUSE;
 			desc.insertBefore = a_insertBefore;
@@ -78,10 +82,12 @@ namespace MenuHelper::Papyrus
 
 		bool SetEntryEnabled(std::monostate, std::int32_t a_entry, bool a_enabled) { return Api().SetEntryEnabled(ToId(a_entry), a_enabled) != 0; }
 
-		std::int32_t CreateMenu(std::monostate)
+		std::int32_t CreateMenu(std::monostate, std::string_view a_modName)
 		{
+			const std::string   modName{ a_modName };
 			MenuHelper_MenuDesc desc{};
 			desc.structSize = sizeof(desc);
+			desc.modName = modName.c_str();
 			desc.onOpen = OnMenuOpen;
 			desc.onClose = OnMenuClose;
 			const auto id = Api().CreateMenu(&desc);
@@ -94,13 +100,15 @@ namespace MenuHelper::Papyrus
 
 		bool DestroyMenu(std::monostate, std::int32_t a_menu) { return Api().DestroyMenu(ToId(a_menu)) != 0; }
 
-		std::int32_t AddItem(std::int32_t a_menu, MenuHelper_ItemDesc& a_desc, std::string_view a_label, std::string_view a_description)
+		std::int32_t AddItem(std::int32_t a_menu, MenuHelper_ItemDesc& a_desc, std::string_view a_label, std::string_view a_description, std::string_view a_saveKey = {})
 		{
 			const std::string label{ a_label };
 			const std::string description{ a_description };
+			const std::string saveKey{ a_saveKey };
 			a_desc.structSize = sizeof(a_desc);
 			a_desc.label = label.c_str();
 			a_desc.description = description.c_str();
+			a_desc.saveKey = saveKey.empty() ? nullptr : saveKey.c_str();
 			a_desc.onChange = OnItemChange;
 			return static_cast<std::int32_t>(Api().AddItem(ToId(a_menu), &a_desc));
 		}
@@ -113,15 +121,15 @@ namespace MenuHelper::Papyrus
 			return AddItem(a_menu, desc, a_label, a_description);
 		}
 
-		std::int32_t AddCheckbox(std::monostate, std::int32_t a_menu, std::string_view a_label, bool a_checked, std::string_view a_description)
+		std::int32_t AddCheckbox(std::monostate, std::int32_t a_menu, std::string_view a_label, bool a_checked, std::string_view a_description, std::string_view a_saveKey)
 		{
 			MenuHelper_ItemDesc desc{};
 			desc.type = MENUHELPER_ITEM_CHECKBOX;
 			desc.value = a_checked ? 1.0F : 0.0F;
-			return AddItem(a_menu, desc, a_label, a_description);
+			return AddItem(a_menu, desc, a_label, a_description, a_saveKey);
 		}
 
-		std::int32_t AddStepper(std::monostate, std::int32_t a_menu, std::string_view a_label, std::vector<std::string> a_options, std::int32_t a_index, std::string_view a_description)
+		std::int32_t AddStepper(std::monostate, std::int32_t a_menu, std::string_view a_label, std::vector<std::string> a_options, std::int32_t a_index, std::string_view a_description, std::string_view a_saveKey)
 		{
 			std::vector<const char*> options;
 			std::ranges::transform(a_options, std::back_inserter(options), &std::string::c_str);
@@ -130,10 +138,10 @@ namespace MenuHelper::Papyrus
 			desc.options = options.data();
 			desc.optionCount = static_cast<std::uint32_t>(options.size());
 			desc.value = static_cast<float>(a_index);
-			return AddItem(a_menu, desc, a_label, a_description);
+			return AddItem(a_menu, desc, a_label, a_description, a_saveKey);
 		}
 
-		std::int32_t AddSlider(std::monostate, std::int32_t a_menu, std::string_view a_label, float a_value, float a_min, float a_max, float a_step, std::string_view a_description)
+		std::int32_t AddSlider(std::monostate, std::int32_t a_menu, std::string_view a_label, float a_value, float a_min, float a_max, float a_step, std::string_view a_description, std::string_view a_saveKey)
 		{
 			MenuHelper_ItemDesc desc{};
 			desc.type = MENUHELPER_ITEM_SLIDER;
@@ -141,7 +149,7 @@ namespace MenuHelper::Papyrus
 			desc.min = a_min;
 			desc.max = a_max;
 			desc.step = a_step;
-			return AddItem(a_menu, desc, a_label, a_description);
+			return AddItem(a_menu, desc, a_label, a_description, a_saveKey);
 		}
 
 		bool RemoveItem(std::monostate, std::int32_t a_item) { return Api().RemoveItem(ToId(a_item)) != 0; }
@@ -161,6 +169,39 @@ namespace MenuHelper::Papyrus
 		float GetItemValue(std::monostate, std::int32_t a_item) { return Api().GetItemValue(ToId(a_item)); }
 		bool  OpenMenu(std::monostate, std::int32_t a_menu) { return Api().OpenMenu(ToId(a_menu)) != 0; }
 		bool  CloseMenu(std::monostate, std::int32_t a_menu) { return Api().CloseMenu(ToId(a_menu)) != 0; }
+
+		std::int32_t ChangeVanillaEntry(std::monostate, std::int32_t a_entry, bool a_hidden, std::int32_t a_move)
+		{
+			MenuHelper_VanillaChangeDesc desc{};
+			desc.structSize = sizeof(desc);
+			desc.menus = MENUHELPER_MENU_PAUSE;
+			desc.entry = a_entry;
+			desc.hidden = a_hidden;
+			desc.move = a_move;
+			const auto id = Api().ChangeVanillaEntry(&desc);
+			if (id != MENUHELPER_INVALID_ID) {
+				const std::scoped_lock l{ g_lock };
+				g_changes.push_back(id);
+			}
+			return static_cast<std::int32_t>(id);
+		}
+
+		bool RemoveVanillaChange(std::monostate, std::int32_t a_change) { return Api().RemoveVanillaChange(ToId(a_change)) != 0; }
+
+		std::string Translate(std::monostate, std::string_view a_modName, std::string_view a_text)
+		{
+			return std::string{ Translations::IsValidModName(a_modName) ? Translations::Lookup(a_modName, a_text) : a_text };
+		}
+
+		std::string FillPlaceholder(std::monostate, std::string_view a_text, std::string_view a_name, std::string_view a_value)
+		{
+			std::string text{ a_text };
+			const auto  placeholder = std::format("{{{}}}", a_name);
+			for (auto at = text.find(placeholder); at != std::string::npos; at = text.find(placeholder, at + a_value.size())) {
+				text.replace(at, placeholder.size(), a_value);
+			}
+			return text;
+		}
 	}
 
 	bool RegisterFunctions(RE::BSScript::IVirtualMachine* a_vm)
@@ -183,23 +224,32 @@ namespace MenuHelper::Papyrus
 		a_vm->BindNativeMethod(kScript, "GetItemValue"sv, GetItemValue, true);
 		a_vm->BindNativeMethod(kScript, "OpenMenu"sv, OpenMenu, true);
 		a_vm->BindNativeMethod(kScript, "CloseMenu"sv, CloseMenu, true);
+		a_vm->BindNativeMethod(kScript, "ChangeVanillaEntry"sv, ChangeVanillaEntry, true);
+		a_vm->BindNativeMethod(kScript, "RemoveVanillaChange"sv, RemoveVanillaChange, true);
+		a_vm->BindNativeMethod(kScript, "Translate"sv, Translate, true);
+		a_vm->BindNativeMethod(kScript, "FillPlaceholder"sv, FillPlaceholder, true);
 		return true;
 	}
 
 	void ClearRegistrations()
 	{
-		std::vector<MenuHelper_EntryId> entries;
-		std::vector<MenuHelper_MenuId>  menus;
+		std::vector<MenuHelper_EntryId>  entries;
+		std::vector<MenuHelper_MenuId>   menus;
+		std::vector<MenuHelper_ChangeId> changes;
 		{
 			const std::scoped_lock l{ g_lock };
 			entries = std::exchange(g_entries, {});
 			menus = std::exchange(g_menus, {});
+			changes = std::exchange(g_changes, {});
 		}
 		for (const auto entry : entries) {
 			Api().RemoveEntry(entry);
 		}
 		for (const auto menu : menus) {
 			Api().DestroyMenu(menu);
+		}
+		for (const auto change : changes) {
+			Api().RemoveVanillaChange(change);
 		}
 	}
 }

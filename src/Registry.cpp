@@ -1,12 +1,28 @@
 #include "Registry.h"
 
+#include "SavedValues.h"
+#include "Translations.h"
+
 namespace MenuHelper
 {
 	namespace
 	{
+		bool IsValidModName(const char* a_modName)
+		{
+			if (a_modName && Translations::IsValidModName(a_modName)) {
+				return true;
+			}
+			REX::WARN("rejected mod name \"{}\": it must be a valid file name", a_modName ? a_modName : "");
+			return false;
+		}
+
 		bool IsValidItem(const MenuHelper_ItemDesc& a_desc)
 		{
 			if (!a_desc.label) {
+				return false;
+			}
+			if (a_desc.saveKey && (a_desc.type == MENUHELPER_ITEM_BUTTON || !SavedValues::IsValidKey(a_desc.saveKey))) {
+				REX::WARN("rejected item \"{}\": buttons cannot have a save key, and save keys must be valid INI keys", a_desc.label);
 				return false;
 			}
 			switch (a_desc.type) {
@@ -60,13 +76,15 @@ namespace MenuHelper
 
 	MenuHelper_EntryId Registry::AddEntry(const MenuHelper_EntryDesc& a_desc)
 	{
-		if (!a_desc.label || (a_desc.menus & MENUHELPER_MENU_ALL) == 0) {
+		if (!a_desc.label || (a_desc.menus & MENUHELPER_MENU_ALL) == 0 || !IsValidModName(a_desc.modName)) {
 			return MENUHELPER_INVALID_ID;
 		}
 		const std::scoped_lock l{ _lock };
 		Entry entry;
 		entry.id = _nextId++;
+		entry.modName = a_desc.modName;
 		entry.label = a_desc.label;
+		Translations::AddToTemplate(entry.modName, entry.label);
 		entry.menus = a_desc.menus & MENUHELPER_MENU_ALL;
 		entry.insertBefore = a_desc.insertBefore;
 		entry.onPress = a_desc.onPress;
@@ -90,6 +108,7 @@ namespace MenuHelper
 			return false;
 		}
 		entry->label = a_label;
+		Translations::AddToTemplate(entry->modName, entry->label);
 		return true;
 	}
 
@@ -121,9 +140,13 @@ namespace MenuHelper
 
 	MenuHelper_MenuId Registry::CreateMenu(const MenuHelper_MenuDesc& a_desc)
 	{
+		if (!IsValidModName(a_desc.modName)) {
+			return MENUHELPER_INVALID_ID;
+		}
 		const std::scoped_lock l{ _lock };
 		Menu menu;
 		menu.id = _nextId++;
+		menu.modName = a_desc.modName;
 		menu.onOpen = a_desc.onOpen;
 		menu.onClose = a_desc.onClose;
 		menu.user = a_desc.user;
@@ -157,6 +180,7 @@ namespace MenuHelper
 		Item item;
 		item.id = _nextId++;
 		item.menu = a_menu;
+		item.modName = menu->modName;
 		item.type = a_desc.type;
 		item.label = a_desc.label;
 		item.description = a_desc.description ? a_desc.description : "";
@@ -166,7 +190,15 @@ namespace MenuHelper
 		if (a_desc.type == MENUHELPER_ITEM_STEPPER) {
 			item.options.assign(a_desc.options, a_desc.options + a_desc.optionCount);
 		}
-		item.value = item.Clamp(a_desc.value);
+		item.saveKey = a_desc.saveKey ? a_desc.saveKey : "";
+		const auto saved = item.saveKey.empty() ? std::nullopt : SavedValues::Load(item.modName, item.saveKey);
+		item.value = item.Clamp(saved.value_or(a_desc.value));
+		for (const auto& text : { item.label, item.description }) {
+			Translations::AddToTemplate(item.modName, text);
+		}
+		for (const auto& option : item.options) {
+			Translations::AddToTemplate(item.modName, option);
+		}
 		item.submenu = a_desc.type == MENUHELPER_ITEM_BUTTON ? a_desc.submenu : MENUHELPER_INVALID_ID;
 		item.onChange = a_desc.onChange;
 		item.user = a_desc.user;
@@ -199,12 +231,18 @@ namespace MenuHelper
 
 	MenuHelper_MenuId Registry::SetItemLabel(MenuHelper_ItemId a_id, std::string_view a_label)
 	{
-		return UpdateItem(a_id, [&](Item& a_item) { a_item.label = a_label; });
+		return UpdateItem(a_id, [&](Item& a_item) {
+			a_item.label = a_label;
+			Translations::AddToTemplate(a_item.modName, a_item.label);
+		});
 	}
 
 	MenuHelper_MenuId Registry::SetItemDescription(MenuHelper_ItemId a_id, std::string_view a_description)
 	{
-		return UpdateItem(a_id, [&](Item& a_item) { a_item.description = a_description; });
+		return UpdateItem(a_id, [&](Item& a_item) {
+			a_item.description = a_description;
+			Translations::AddToTemplate(a_item.modName, a_item.description);
+		});
 	}
 
 	MenuHelper_MenuId Registry::SetItemEnabled(MenuHelper_ItemId a_id, bool a_enabled)
@@ -214,7 +252,17 @@ namespace MenuHelper
 
 	MenuHelper_MenuId Registry::SetItemValue(MenuHelper_ItemId a_id, float a_value)
 	{
-		return UpdateItem(a_id, [&](Item& a_item) { a_item.value = a_item.Clamp(a_value); });
+		std::optional<Item> saved;
+		const auto          menu = UpdateItem(a_id, [&](Item& a_item) {
+			a_item.value = a_item.Clamp(a_value);
+			if (!a_item.saveKey.empty()) {
+				saved = a_item;
+			}
+		});
+		if (saved) {
+			SavedValues::Save(saved->modName, saved->saveKey, saved->value);
+		}
+		return menu;
 	}
 
 	std::optional<Item> Registry::FindItem(MenuHelper_ItemId a_id) const
@@ -227,6 +275,51 @@ namespace MenuHelper
 			}
 		}
 		return std::nullopt;
+	}
+
+	bool Registry::ReplaceItems(MenuHelper_MenuId a_menu, std::vector<Item> a_items)
+	{
+		const std::scoped_lock l{ _lock };
+		const auto             menu = std::ranges::find(_menus, a_menu, &Menu::id);
+		if (menu == _menus.end()) {
+			return false;
+		}
+		for (auto& item : a_items) {
+			item.id = _nextId++;
+			item.menu = a_menu;
+		}
+		menu->items = std::move(a_items);
+		return true;
+	}
+
+	MenuHelper_ChangeId Registry::AddVanillaChange(const MenuHelper_VanillaChangeDesc& a_desc)
+	{
+		if ((a_desc.menus & MENUHELPER_MENU_ALL) == 0 || a_desc.entry < 0) {
+			return MENUHELPER_INVALID_ID;
+		}
+		const std::scoped_lock l{ _lock };
+		VanillaChange change;
+		change.id = _nextId++;
+		change.menus = a_desc.menus & MENUHELPER_MENU_ALL;
+		change.entry = a_desc.entry;
+		change.hidden = a_desc.hidden != 0;
+		change.move = a_desc.move;
+		_changes.push_back(change);
+		return change.id;
+	}
+
+	bool Registry::RemoveVanillaChange(MenuHelper_ChangeId a_id)
+	{
+		const std::scoped_lock l{ _lock };
+		return std::erase_if(_changes, [&](const VanillaChange& a_change) { return a_change.id == a_id; }) > 0;
+	}
+
+	std::vector<VanillaChange> Registry::VanillaChanges(std::uint32_t a_menu) const
+	{
+		const std::scoped_lock     l{ _lock };
+		std::vector<VanillaChange> result;
+		std::ranges::copy_if(_changes, std::back_inserter(result), [&](const VanillaChange& a_change) { return (a_change.menus & a_menu) != 0; });
+		return result;
 	}
 
 	Entry* Registry::FindEntryUnlocked(MenuHelper_EntryId a_id)

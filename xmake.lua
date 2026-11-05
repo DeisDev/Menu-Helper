@@ -9,6 +9,8 @@ set_warnings("allextra")
 add_rules("mode.debug", "mode.releasedbg")
 add_rules("plugin.vsxmake.autoupdate")
 
+add_requires("glaze v7.0.0", "simpleini v4.25")
+
 option("flex_sdk")
     set_default("")
     set_showmenu(true)
@@ -40,11 +42,13 @@ target("MenuHelper")
         description = "Runtime API for adding entries and submenus to the Fallout 4 main and pause menus"
     })
 
+    add_packages("glaze", "simpleini")
     add_files("src/**.cpp")
     add_headerfiles("src/**.h")
     add_includedirs("src", "include")
     set_pcxxheader("src/pch.h")
     add_installfiles("swf/MenuHelper.swf", { prefixdir = "Interface/MenuHelper" })
+    add_installfiles("res/MenuHelper.ini", { prefixdir = "F4SE/Plugins" })
     add_installfiles("papyrus/MenuHelper.pex", { prefixdir = "Scripts" })
     add_installfiles("papyrus/MenuHelper.psc", { prefixdir = "Scripts/Source/User" })
 
@@ -57,6 +61,7 @@ target("MenuHelperExample")
 
     add_files("examples/basic/**.cpp")
     add_includedirs("include")
+    add_installfiles("examples/basic/Translations/*.json", { prefixdir = "Interface/MenuHelper/Translations" })
 
 -- Rebuilds swf/MenuHelper.swf from swf/src. Not built by default so C++-only builds need no Flex SDK.
 target("MenuHelperSWF")

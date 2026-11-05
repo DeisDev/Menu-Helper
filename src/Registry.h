@@ -7,6 +7,7 @@ namespace MenuHelper
 	struct Entry
 	{
 		MenuHelper_EntryId       id{ MENUHELPER_INVALID_ID };
+		std::string              modName;
 		std::string              label;
 		std::uint32_t            menus{ 0 };
 		std::int32_t             insertBefore{ MENUHELPER_VANILLA_APPEND };
@@ -20,6 +21,7 @@ namespace MenuHelper
 	{
 		MenuHelper_ItemId        id{ MENUHELPER_INVALID_ID };
 		MenuHelper_MenuId        menu{ MENUHELPER_INVALID_ID };
+		std::string              modName;
 		std::uint32_t            type{ MENUHELPER_ITEM_BUTTON };
 		std::string              label;
 		std::string              description;
@@ -31,6 +33,7 @@ namespace MenuHelper
 		MenuHelper_MenuId        submenu{ MENUHELPER_INVALID_ID };
 		MenuHelper_ItemCallback  onChange{ nullptr };
 		void*                    user{ nullptr };
+		std::string              saveKey;
 		bool                     enabled{ true };
 
 		float Clamp(float a_value) const;
@@ -39,12 +42,22 @@ namespace MenuHelper
 	struct Menu
 	{
 		MenuHelper_MenuId       id{ MENUHELPER_INVALID_ID };
+		std::string             modName;
 		MenuHelper_MenuCallback onOpen{ nullptr };
 		MenuHelper_MenuCallback onClose{ nullptr };
 		void*                   user{ nullptr };
 		std::vector<Item>       items;
 
 		bool UsesOptionsLayout() const;
+	};
+
+	struct VanillaChange
+	{
+		MenuHelper_ChangeId id{ MENUHELPER_INVALID_ID };
+		std::uint32_t       menus{ 0 };
+		std::int32_t        entry{ 0 };
+		bool                hidden{ false };
+		std::int32_t        move{ 0 };
 	};
 
 	class Registry
@@ -70,6 +83,12 @@ namespace MenuHelper
 		MenuHelper_MenuId   SetItemEnabled(MenuHelper_ItemId a_id, bool a_enabled);
 		MenuHelper_MenuId   SetItemValue(MenuHelper_ItemId a_id, float a_value);
 		std::optional<Item> FindItem(MenuHelper_ItemId a_id) const;
+		// Gives the items new IDs. For menus MenuHelper builds itself.
+		bool                ReplaceItems(MenuHelper_MenuId a_menu, std::vector<Item> a_items);
+
+		MenuHelper_ChangeId        AddVanillaChange(const MenuHelper_VanillaChangeDesc& a_desc);
+		bool                       RemoveVanillaChange(MenuHelper_ChangeId a_id);
+		std::vector<VanillaChange> VanillaChanges(std::uint32_t a_menu) const;
 
 	private:
 		Entry* FindEntryUnlocked(MenuHelper_EntryId a_id);
@@ -78,9 +97,10 @@ namespace MenuHelper
 		template <class F>
 		MenuHelper_MenuId UpdateItem(MenuHelper_ItemId a_id, F&& a_update);
 
-		mutable std::mutex _lock;
-		std::vector<Entry> _entries;
-		std::vector<Menu>  _menus;
-		std::uint32_t      _nextId{ 1 };
+		mutable std::mutex         _lock;
+		std::vector<Entry>         _entries;
+		std::vector<Menu>          _menus;
+		std::vector<VanillaChange> _changes;
+		std::uint32_t              _nextId{ 1 };
 	};
 }

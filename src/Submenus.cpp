@@ -3,6 +3,7 @@
 #include "GFxUtil.h"
 #include "Injector.h"
 #include "Registry.h"
+#include "Translations.h"
 
 namespace MenuHelper::Submenus
 {
@@ -210,7 +211,8 @@ namespace MenuHelper::Submenus
 			Value items;
 			a_movie.CreateArray(&items);
 			for (const auto& item : a_menu.items) {
-				const auto label = GFx::EscapeHtml(item.label);
+				const auto label = GFx::EscapeHtml(Translations::Lookup(item.modName, item.label));
+				const std::string description{ Translations::Lookup(item.modName, item.description) };
 				const auto range = item.max - item.min;
 				const bool slider = item.type == MENUHELPER_ITEM_SLIDER;
 
@@ -219,7 +221,7 @@ namespace MenuHelper::Submenus
 				obj.SetMember("itemId", Value(item.id));
 				obj.SetMember("itemType", Value(item.type));
 				obj.SetMember("text", Value(label.c_str()));
-				obj.SetMember("description", Value(item.description.c_str()));
+				obj.SetMember("description", Value(description.c_str()));
 				obj.SetMember("disabled", Value(!item.enabled));
 				obj.SetMember("value", Value(static_cast<double>(slider ? (item.value - item.min) / range : item.value)));
 				obj.SetMember("step", Value(static_cast<double>(slider ? item.step / range : 0.0F)));
@@ -227,7 +229,7 @@ namespace MenuHelper::Submenus
 					Value options;
 					a_movie.CreateArray(&options);
 					for (const auto& option : item.options) {
-						options.PushBack(Value(option.c_str()));
+						options.PushBack(Value(std::string{ Translations::Lookup(item.modName, option) }.c_str()));
 					}
 					obj.SetMember("options", options);
 				}
@@ -516,9 +518,9 @@ namespace MenuHelper::Submenus
 		loader.Invoke("load", std::array{ request });
 	}
 
-	void OnMainListRebuilt(RE::IMenu& a_host, std::uint32_t a_injectedCount)
+	void OnMainListRebuilt(RE::IMenu& a_host)
 	{
-		InvokeUI(a_host, "OnMainListInjected", std::array{ Value(a_injectedCount) });
+		InvokeUI(a_host, "OnMainListInjected");
 	}
 
 	void CloseAll(std::uint32_t a_hostBit)
