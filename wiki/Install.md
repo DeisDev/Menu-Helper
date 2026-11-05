@@ -26,4 +26,4 @@ Items with a save key keep their values in `Data/F4SE/Plugins/MenuHelper/Setting
 - Needs the vanilla `Interface/MainMenu.swf`. If another mod replaces it, Menu Helper logs a warning and adds nothing.
 - Entries from other mods, such as MCM's MOD CONFIG, keep their place.
 
-Log: `Documents/My Games/Fallout4/F4SE/MenuHelper.log`.
+Log: `Documents/My Games/Fallout4/F4SE/MenuHelper.log`. Its first line shows the installed version.

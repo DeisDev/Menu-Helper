@@ -13,10 +13,33 @@ namespace
 {
 	using MenuHelper::Registry;
 
+	// Each struct's size in API version 1. Later versions only append fields, so these must not change:
+	// plugins built against an older header pass smaller structs, and the missing fields read as 0.
 	template <class T>
-	const T* ReadDesc(const T* a_desc)
+	constexpr std::size_t kMinSize = 0;
+	template <>
+	constexpr std::size_t kMinSize<MenuHelper_EntryDesc> = offsetof(MenuHelper_EntryDesc, submenu) + sizeof(MenuHelper_EntryDesc::submenu);
+	template <>
+	constexpr std::size_t kMinSize<MenuHelper_MenuDesc> = offsetof(MenuHelper_MenuDesc, user) + sizeof(MenuHelper_MenuDesc::user);
+	template <>
+	constexpr std::size_t kMinSize<MenuHelper_ItemDesc> = offsetof(MenuHelper_ItemDesc, imageHeight) + sizeof(MenuHelper_ItemDesc::imageHeight);
+	template <>
+	constexpr std::size_t kMinSize<MenuHelper_VanillaChangeDesc> = offsetof(MenuHelper_VanillaChangeDesc, move) + sizeof(MenuHelper_VanillaChangeDesc::move);
+	template <>
+	constexpr std::size_t kMinSize<MenuHelper_MessageBoxDesc> = offsetof(MenuHelper_MessageBoxDesc, user) + sizeof(MenuHelper_MessageBoxDesc::user);
+	template <>
+	constexpr std::size_t kMinSize<MenuHelper_ConfirmDesc> = offsetof(MenuHelper_ConfirmDesc, user) + sizeof(MenuHelper_ConfirmDesc::user);
+
+	template <class T>
+	std::optional<T> ReadDesc(const T* a_desc)
 	{
-		return a_desc && a_desc->structSize >= sizeof(T) ? a_desc : nullptr;
+		static_assert(kMinSize<T> > 0);
+		if (!a_desc || a_desc->structSize < kMinSize<T>) {
+			return std::nullopt;
+		}
+		T desc{};
+		std::memcpy(&desc, a_desc, std::min<std::size_t>(a_desc->structSize, sizeof(T)));
+		return desc;
 	}
 
 	bool IsModName(const char* a_modName)
@@ -261,5 +284,5 @@ namespace
 
 const MenuHelper_API* MenuHelper_GetAPI(std::uint32_t a_requestedVersion)
 {
-	return a_requestedVersion == MENUHELPER_API_VERSION ? &g_api : nullptr;
+	return a_requestedVersion >= 1 && a_requestedVersion <= MENUHELPER_API_VERSION ? &g_api : nullptr;
 }

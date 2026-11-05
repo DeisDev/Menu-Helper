@@ -10,6 +10,8 @@
 #include <charconv>
 #include <cmath>
 #include <condition_variable>
+#include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <format>
 #include <fstream>

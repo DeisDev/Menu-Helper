@@ -65,6 +65,11 @@ namespace MenuHelper::JsonMenus
 			std::optional<std::string>                          menu;
 		};
 
+		struct JsonVersion
+		{
+			std::int32_t version{ 0 };
+		};
+
 		struct JsonConfig
 		{
 			std::int32_t                    version{ 0 };
@@ -80,7 +85,7 @@ namespace MenuHelper::JsonMenus
 		constexpr auto         kDirectory = "Data/MenuHelper/Config"sv;
 		constexpr auto         kFileName = "menu.json"sv;
 		constexpr auto         kUtf8Bom = "\xEF\xBB\xBF"sv;
-		constexpr std::int32_t kVersion = 1;
+		constexpr std::int32_t kVersion = MENUHELPER_API_VERSION;
 		constexpr std::int32_t kDefaultInsertBefore = MENUHELPER_VANILLA_QUIT;
 		constexpr std::uint32_t kOpaque = 0xFF000000;
 
@@ -303,6 +308,15 @@ namespace MenuHelper::JsonMenus
 			if (buffer.starts_with(kUtf8Bom)) {
 				buffer.erase(0, kUtf8Bom.size());
 			}
+			JsonVersion header;
+			if (const auto error = glz::read<glz::opts{ .comments = true, .error_on_unknown_keys = false }>(header, buffer)) {
+				REX::ERROR("{}: {}; the file is skipped", display, glz::format_error(error, buffer));
+				return;
+			}
+			if (header.version > kVersion) {
+				REX::ERROR("{}: version {} needs a newer Menu Helper, this one reads up to version {}; the file is skipped", display, header.version, kVersion);
+				return;
+			}
 			JsonConfig config;
 			if (const auto error = glz::read<glz::opts{ .comments = true }>(config, buffer)) {
 				REX::ERROR("{}: {}; the file is skipped", display, glz::format_error(error, buffer));
@@ -310,8 +324,8 @@ namespace MenuHelper::JsonMenus
 			}
 
 			Problems problems{ display };
-			if (config.version != kVersion) {
-				problems.Add("version", std::format("must be {}", kVersion));
+			if (config.version < 1) {
+				problems.Add("version", "must be at least 1");
 			}
 			std::vector<std::pair<std::string, std::uint32_t>> menus;
 			std::vector<Prototype>                             items;

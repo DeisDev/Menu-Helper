@@ -25,6 +25,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - Menus of text pages, like vanilla HELP, with optional DDS images.
 - Mods can add menus with a JSON file and no code.
 - Plugins and Papyrus can read and write saved values and hear about setting changes and actions.
+- Plugins and JSON menus made for an older Menu Helper keep working with newer versions.
+- Papyrus scripts can read the installed API version with `GetAPIVersion`.
 
 ### Fixed
 

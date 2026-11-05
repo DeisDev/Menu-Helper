@@ -249,7 +249,10 @@ typedef struct MenuHelper_API {
 	int (*RegisterActionListener)(const char* modName, MenuHelper_ActionCallback callback, void* user);
 } MenuHelper_API;
 
-/* Exported by MenuHelper.dll. Returns NULL when the requested version is not supported. */
+/* Exported by MenuHelper.dll. Returns NULL when requestedVersion is 0 or newer than the installed MenuHelper.
+   Newer versions only add functions to the end of MenuHelper_API and fields to the end of the descriptor
+   structs, so a plugin built against an older header keeps working. version holds the installed version:
+   to use a function added after the version you requested, check version first. */
 typedef const MenuHelper_API* (*MenuHelper_GetAPI_t)(uint32_t requestedVersion);
 
 #ifdef __cplusplus
@@ -257,7 +260,8 @@ typedef const MenuHelper_API* (*MenuHelper_GetAPI_t)(uint32_t requestedVersion);
 #endif
 
 /* Optional runtime loader, available when <Windows.h> was included before this header.
-   Call after all F4SE plugins have loaded (F4SE kPostLoad or later).
+   Call after all F4SE plugins have loaded (F4SE kPostLoad or later). Returns NULL when MenuHelper is not
+   installed or is older than this header.
    Without <Windows.h>, resolve "MenuHelper_GetAPI" from GetModuleHandleW(L"MenuHelper.dll") yourself. */
 #if defined(_WINDOWS_) && !defined(MENUHELPER_NO_LOADER)
 static inline const MenuHelper_API* MenuHelper_Load(void)

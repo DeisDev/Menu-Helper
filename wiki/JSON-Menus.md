@@ -6,6 +6,8 @@ A mod can add a menu without code. Put one file at:
 
 The folder name is the mod name. Menu Helper reads these files once when the game starts.
 
+`version` is the Menu Helper API version the file needs. Use `1`. Newer Menu Helper versions read older files. An older Menu Helper skips a newer file and says so in its log.
+
 ## Example
 
 ```json

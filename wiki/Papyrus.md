@@ -6,6 +6,7 @@
 - Entries, menus and vanilla changes a script creates are removed when a game is loaded or started. Register from `OnInit` and again after every load.
 - Events go to every registered script. Compare the ID first.
 - Do not pass `None` as an array. It crashes the game.
+- `F4SE.GetPluginVersion("MenuHelper")` returns -1 when Menu Helper is not installed. `MenuHelper.GetAPIVersion()` returns its API version; functions added later say which version they need.
 
 ```papyrus
 Scriptname MyModMenuQuest extends Quest

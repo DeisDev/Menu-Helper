@@ -77,6 +77,8 @@ namespace MenuHelper::Papyrus
 			return a_id > 0 ? static_cast<std::uint32_t>(a_id) : MENUHELPER_INVALID_ID;
 		}
 
+		std::int32_t GetAPIVersion(std::monostate) { return static_cast<std::int32_t>(Api().version); }
+
 		std::int32_t AddEntry(std::monostate, std::string_view a_modName, std::string_view a_label, std::int32_t a_submenu, std::int32_t a_insertBefore)
 		{
 			const std::string    modName{ a_modName };
@@ -372,6 +374,7 @@ namespace MenuHelper::Papyrus
 
 	bool RegisterFunctions(RE::BSScript::IVirtualMachine* a_vm)
 	{
+		a_vm->BindNativeMethod(kScript, "GetAPIVersion"sv, GetAPIVersion, true);
 		a_vm->BindNativeMethod(kScript, "AddEntry"sv, AddEntry, true);
 		a_vm->BindNativeMethod(kScript, "RemoveEntry"sv, RemoveEntry, true);
 		a_vm->BindNativeMethod(kScript, "SetEntryLabel"sv, SetEntryLabel, true);

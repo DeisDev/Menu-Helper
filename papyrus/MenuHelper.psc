@@ -29,6 +29,10 @@ Scriptname MenuHelper Native Hidden
 ;
 ; IDs are always greater than 0. Functions return 0 or False when they fail.
 
+; The installed Menu Helper's API version. It goes up when functions are added; each function added
+; after version 1 says which version it needs.
+int Function GetAPIVersion() global native
+
 ; aiInsertBefore is a vanilla entry index (10 = QUIT, 8 = SETTINGS), or -1 to add at the end.
 int Function AddEntry(string asModName, string asLabel, int aiSubmenu = 0, int aiInsertBefore = 10) global native
 bool Function RemoveEntry(int aiEntry) global native

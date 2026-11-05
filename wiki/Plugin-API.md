@@ -43,6 +43,10 @@ void Register()
 }
 ```
 
+## Versions
+
+`MenuHelper_Load` returns `NULL` when Menu Helper is missing or older than your copy of the header. Newer Menu Helper versions work with plugins built against older headers.
+
 ## Functions
 
 | Function | Use |
