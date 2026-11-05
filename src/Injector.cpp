@@ -2,6 +2,7 @@
 
 #include "Config.h"
 #include "GFxUtil.h"
+#include "Hotkeys.h"
 #include "Registry.h"
 #include "Submenus.h"
 #include "Translations.h"
@@ -13,6 +14,7 @@ namespace MenuHelper::Injector
 		using GFx::Value;
 
 		constexpr std::size_t        kInitMainListVFuncIdx = 0x15;
+		constexpr std::size_t        kShouldHandleEventVFuncIdx = 0x01;
 		constexpr std::size_t        kOnButtonEventVFuncIdx = 0x08;
 		constexpr std::size_t        kInputEventUserOffset = 0x10;
 		constexpr double             kInjectedIndexBase = 1000.0;
@@ -236,7 +238,7 @@ namespace MenuHelper::Injector
 			return std::ranges::find_if(a_rows, [&](const Row& a_row) { return !a_row.mod && static_cast<std::int32_t>(a_row.index) == a_entry; });
 		}
 
-		void OnGroupItemPress(MenuHelper_ItemId, float, void* a_user)
+		void OnGroupItemPress(MenuHelper_ItemId, double, void* a_user)
 		{
 			const auto data = reinterpret_cast<std::uintptr_t>(a_user);
 			const auto entry = Registry::Get().FindEntry(static_cast<MenuHelper_EntryId>(data & 0xFFFFFFFF));
@@ -436,6 +438,14 @@ namespace MenuHelper::Injector
 
 			static inline REL::Relocation<decltype(&thunk)> func;
 
+			// While a hotkey row waits for a key, the menu must also receive buttons it has no user event for.
+			static bool ShouldHandle(RE::BSInputEventUser* a_this, const RE::InputEvent* a_event)
+			{
+				return (a_event && *a_event->eventType == RE::INPUT_EVENT_TYPE::kButton && Hotkeys::IsCapturing()) || shouldHandle(a_this, a_event);
+			}
+
+			static inline REL::Relocation<decltype(&ShouldHandle)> shouldHandle;
+
 			static bool Install()
 			{
 				REL::Relocation<std::uintptr_t> vtbl{ Menu::VTABLE[1] };
@@ -444,6 +454,7 @@ namespace MenuHelper::Injector
 					return false;
 				}
 				func = vtbl.write_vfunc(kOnButtonEventVFuncIdx, &thunk);
+				shouldHandle = vtbl.write_vfunc(kShouldHandleEventVFuncIdx, &ShouldHandle);
 				return true;
 			}
 		};

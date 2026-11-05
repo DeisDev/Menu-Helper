@@ -1,7 +1,11 @@
 #include "API.h"
 
+#include "Dialogs.h"
+#include "Hotkeys.h"
 #include "Injector.h"
+#include "JsonMenus.h"
 #include "Registry.h"
+#include "SavedValues.h"
 #include "Submenus.h"
 #include "Translations.h"
 
@@ -13,6 +17,11 @@ namespace
 	const T* ReadDesc(const T* a_desc)
 	{
 		return a_desc && a_desc->structSize >= sizeof(T) ? a_desc : nullptr;
+	}
+
+	bool IsModName(const char* a_modName)
+	{
+		return a_modName && MenuHelper::Translations::IsValidModName(a_modName);
 	}
 
 	int RefreshMenuIf(MenuHelper_MenuId a_menu)
@@ -69,7 +78,8 @@ namespace
 	MenuHelper_ItemId AddItem(MenuHelper_MenuId a_menu, const MenuHelper_ItemDesc* a_desc)
 	{
 		const auto desc = ReadDesc(a_desc);
-		const auto id = desc ? Registry::Get().AddItem(a_menu, *desc) : MENUHELPER_INVALID_ID;
+		auto       item = desc ? Registry::MakeItem(*desc) : std::nullopt;
+		const auto id = item ? Registry::Get().AddItem(a_menu, std::move(*item)) : MENUHELPER_INVALID_ID;
 		if (id != MENUHELPER_INVALID_ID) {
 			RefreshMenuIf(a_menu);
 		}
@@ -96,15 +106,20 @@ namespace
 		return RefreshMenuIf(Registry::Get().SetItemEnabled(a_item, a_enabled != 0));
 	}
 
-	int SetItemValue(MenuHelper_ItemId a_item, float a_value)
+	int SetItemVisible(MenuHelper_ItemId a_item, int a_visible)
+	{
+		return RefreshMenuIf(Registry::Get().SetItemVisible(a_item, a_visible != 0));
+	}
+
+	int SetItemValue(MenuHelper_ItemId a_item, double a_value)
 	{
 		return RefreshMenuIf(Registry::Get().SetItemValue(a_item, a_value));
 	}
 
-	float GetItemValue(MenuHelper_ItemId a_item)
+	double GetItemValue(MenuHelper_ItemId a_item)
 	{
 		const auto item = Registry::Get().FindItem(a_item);
-		return item ? item->value : 0.0F;
+		return item ? item->value : 0.0;
 	}
 
 	int OpenMenu(MenuHelper_MenuId a_menu)
@@ -132,10 +147,84 @@ namespace
 
 	const char* Translate(const char* a_modName, const char* a_text)
 	{
-		if (!a_modName || !a_text || !MenuHelper::Translations::IsValidModName(a_modName)) {
+		if (!a_text || !IsModName(a_modName)) {
 			return a_text;
 		}
 		return MenuHelper::Translations::Lookup(a_modName, a_text).data();
+	}
+
+	const char* GetKeyName(std::uint32_t a_hotkey)
+	{
+		return MenuHelper::Hotkeys::KeyNameStable(a_hotkey);
+	}
+
+	MenuHelper_BoxId ShowMessageBox(const MenuHelper_MessageBoxDesc* a_desc)
+	{
+		const auto desc = ReadDesc(a_desc);
+		if (!desc || !desc->body || !desc->buttons || !IsModName(desc->modName) ||
+			!std::all_of(desc->buttons, desc->buttons + desc->buttonCount, [](const char* a_button) { return a_button != nullptr; })) {
+			return MENUHELPER_INVALID_ID;
+		}
+		const std::vector<std::string> buttons(desc->buttons, desc->buttons + desc->buttonCount);
+		auto onButton = [callback = desc->onButton, user = desc->user](MenuHelper_BoxId a_box, std::uint32_t a_button) {
+			if (callback) {
+				callback(a_box, a_button, user);
+			}
+		};
+		return MenuHelper::Dialogs::ShowMessageBox(desc->modName, desc->body, buttons, std::move(onButton));
+	}
+
+	MenuHelper_BoxId ShowConfirm(const MenuHelper_ConfirmDesc* a_desc)
+	{
+		const auto desc = ReadDesc(a_desc);
+		if (!desc || !desc->text || !IsModName(desc->modName)) {
+			return MENUHELPER_INVALID_ID;
+		}
+		auto onResult = [callback = desc->onResult, user = desc->user](MenuHelper_BoxId a_confirm, bool a_result) {
+			if (callback) {
+				callback(a_confirm, a_result, user);
+			}
+		};
+		return MenuHelper::Dialogs::ShowConfirm(desc->modName, desc->text, std::move(onResult));
+	}
+
+	int ShowNotification(const char* a_modName, const char* a_text, const char* a_sound, int a_warning)
+	{
+		return a_text && IsModName(a_modName) && MenuHelper::Dialogs::ShowNotification(a_modName, a_text, a_sound ? a_sound : "", a_warning != 0);
+	}
+
+	int GetSavedValue(const char* a_modName, const char* a_saveKey, double* a_value)
+	{
+		if (!a_value || !a_saveKey || !IsModName(a_modName)) {
+			return false;
+		}
+		const auto value = MenuHelper::SavedValues::Load(a_modName, a_saveKey);
+		if (value) {
+			*a_value = *value;
+		}
+		return value.has_value();
+	}
+
+	int SetSavedValue(const char* a_modName, const char* a_saveKey, double a_value)
+	{
+		if (!a_saveKey || !IsModName(a_modName) || !MenuHelper::SavedValues::IsValidKey(a_saveKey) || !std::isfinite(a_value)) {
+			return false;
+		}
+		MenuHelper::SavedValues::Save(a_modName, a_saveKey, a_value);
+		for (const auto menu : Registry::Get().SetSavedItemValues(a_modName, a_saveKey, a_value)) {
+			RefreshMenuIf(menu);
+		}
+		return true;
+	}
+
+	int RegisterSettingListener(const char* a_modName, MenuHelper_SettingCallback a_callback, void* a_user)
+	{
+		return a_callback && IsModName(a_modName) && MenuHelper::JsonMenus::RegisterSettingListener(a_modName, a_callback, a_user);
+	}
+
+	int RegisterActionListener(const char* a_modName, MenuHelper_ActionCallback a_callback, void* a_user)
+	{
+		return a_callback && IsModName(a_modName) && MenuHelper::JsonMenus::RegisterActionListener(a_modName, a_callback, a_user);
 	}
 
 	constexpr MenuHelper_API g_api{
@@ -151,6 +240,7 @@ namespace
 		.SetItemLabel = SetItemLabel,
 		.SetItemDescription = SetItemDescription,
 		.SetItemEnabled = SetItemEnabled,
+		.SetItemVisible = SetItemVisible,
 		.SetItemValue = SetItemValue,
 		.GetItemValue = GetItemValue,
 		.OpenMenu = OpenMenu,
@@ -158,6 +248,14 @@ namespace
 		.ChangeVanillaEntry = ChangeVanillaEntry,
 		.RemoveVanillaChange = RemoveVanillaChange,
 		.Translate = Translate,
+		.GetKeyName = GetKeyName,
+		.ShowMessageBox = ShowMessageBox,
+		.ShowConfirm = ShowConfirm,
+		.ShowNotification = ShowNotification,
+		.GetSavedValue = GetSavedValue,
+		.SetSavedValue = SetSavedValue,
+		.RegisterSettingListener = RegisterSettingListener,
+		.RegisterActionListener = RegisterActionListener,
 	};
 }
 

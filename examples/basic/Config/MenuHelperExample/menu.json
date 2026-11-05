@@ -1,0 +1,31 @@
+{
+	// A menu without code. MenuHelper reads Data/MenuHelper/Config/<ModName>/menu.json when the game starts.
+	"version": 1,
+	"entries": [
+		{ "label": "JSON EXAMPLE", "menus": ["main", "pause"], "insertBefore": "quit", "menu": "settings" }
+	],
+	"menus": {
+		"settings": {
+			"kind": "items",
+			"items": [
+				{ "type": "header", "label": "GENERAL" },
+				{ "type": "checkbox", "label": "ENABLED", "description": "A checkbox from a JSON file.", "saveKey": "bJsonEnabled", "default": true },
+				{ "type": "stepper", "label": "SIZE", "saveKey": "iJsonSize", "default": 1, "options": ["SMALL", "MEDIUM", "LARGE"] },
+				{ "type": "slider", "label": "RANGE", "description": "From 0 to 100 meters in steps of 5.", "saveKey": "fJsonRange", "default": 50, "min": 0, "max": 100, "step": 5, "format": "{value} m" },
+				{ "type": "dropdown", "label": "MODE", "saveKey": "iJsonMode", "default": 0, "options": ["FIRST", "SECOND", "THIRD"] },
+				{ "type": "header", "label": "CONTROLS" },
+				{ "type": "hotkey", "label": "TOGGLE", "description": "Reports the action \"toggle\" when pressed in game.", "saveKey": "iJsonToggleKey", "default": 0, "modifiers": true, "action": "toggle" },
+				{ "type": "color", "label": "TINT", "saveKey": "uJsonTint", "default": "#FF00FF" },
+				{ "type": "text", "label": "NOTE", "description": "Every value on this page is saved to Data/F4SE/Plugins/MenuHelper/Settings/MenuHelperExample.ini." },
+				{ "type": "button", "label": "ABOUT", "menu": "about" },
+				{ "type": "button", "label": "RESET STATS", "description": "Reports the action \"resetStats\".", "action": "resetStats" }
+			]
+		},
+		"about": {
+			"kind": "pages",
+			"items": [
+				{ "type": "topic", "label": "ABOUT", "text": "<b>JSON example</b><br><br>This page comes from a JSON file.", "image": "Textures/MenuHelperExample/test.dds", "imageWidth": 256, "imageHeight": 64 }
+			]
+		}
+	}
+}

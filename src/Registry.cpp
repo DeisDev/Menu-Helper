@@ -7,6 +7,9 @@ namespace MenuHelper
 {
 	namespace
 	{
+		constexpr const char*   kInternalModName = "MenuHelper";
+		constexpr std::uint32_t kMaxAutoDecimals = 6;
+
 		bool IsValidModName(const char* a_modName)
 		{
 			if (a_modName && Translations::IsValidModName(a_modName)) {
@@ -16,62 +19,164 @@ namespace MenuHelper
 			return false;
 		}
 
+		bool IsValueType(std::uint32_t a_type)
+		{
+			return a_type >= MENUHELPER_ITEM_CHECKBOX && a_type <= MENUHELPER_ITEM_COLOR;
+		}
+
+		bool HasOptions(const MenuHelper_ItemDesc& a_desc)
+		{
+			return a_desc.options && a_desc.optionCount > 0 &&
+			       std::all_of(a_desc.options, a_desc.options + a_desc.optionCount, [](const char* a_option) { return a_option != nullptr; });
+		}
+
 		bool IsValidItem(const MenuHelper_ItemDesc& a_desc)
 		{
 			if (!a_desc.label) {
+				REX::WARN("rejected item: it has no label");
 				return false;
 			}
-			if (a_desc.saveKey && (a_desc.type == MENUHELPER_ITEM_BUTTON || !SavedValues::IsValidKey(a_desc.saveKey))) {
-				REX::WARN("rejected item \"{}\": buttons cannot have a save key, and save keys must be valid INI keys", a_desc.label);
+			if (a_desc.saveKey && (!IsValueType(a_desc.type) || !SavedValues::IsValidKey(a_desc.saveKey))) {
+				REX::WARN("rejected item \"{}\": only value items can have a save key, and save keys must be valid INI keys", a_desc.label);
 				return false;
 			}
 			switch (a_desc.type) {
 				case MENUHELPER_ITEM_BUTTON:
 				case MENUHELPER_ITEM_CHECKBOX:
+				case MENUHELPER_ITEM_HOTKEY:
+				case MENUHELPER_ITEM_COLOR:
+				case MENUHELPER_ITEM_HEADER:
+				case MENUHELPER_ITEM_TEXT:
+				case MENUHELPER_ITEM_TOPIC:
 					return true;
 				case MENUHELPER_ITEM_STEPPER:
-					return a_desc.options && a_desc.optionCount > 0 &&
-					       std::all_of(a_desc.options, a_desc.options + a_desc.optionCount, [](const char* a_option) { return a_option != nullptr; });
+				case MENUHELPER_ITEM_DROPDOWN:
+					if (!HasOptions(a_desc)) {
+						REX::WARN("rejected item \"{}\": it needs at least one option", a_desc.label);
+						return false;
+					}
+					return true;
 				case MENUHELPER_ITEM_SLIDER:
-					return std::isfinite(a_desc.min) && std::isfinite(a_desc.max) && std::isfinite(a_desc.step) &&
-					       a_desc.max > a_desc.min && a_desc.step > 0.0F;
+					if (!std::isfinite(a_desc.min) || !std::isfinite(a_desc.max) || !std::isfinite(a_desc.step) ||
+						a_desc.max <= a_desc.min || a_desc.step <= 0.0) {
+						REX::WARN("rejected slider \"{}\": max must be greater than min and step greater than 0", a_desc.label);
+						return false;
+					}
+					return true;
 				default:
+					REX::WARN("rejected item \"{}\": unknown type {}", a_desc.label, a_desc.type);
 					return false;
 			}
 		}
+
+		bool IsWhole(double a_value)
+		{
+			return std::abs(a_value - std::round(a_value)) < 1e-6;
+		}
 	}
 
-	float Item::Clamp(float a_value) const
+	double Item::Clamp(double a_value) const
 	{
 		if (!std::isfinite(a_value)) {
-			a_value = 0.0F;
+			a_value = 0.0;
 		}
 		switch (type) {
 			case MENUHELPER_ITEM_CHECKBOX:
-				return a_value != 0.0F ? 1.0F : 0.0F;
+				return a_value != 0.0 ? 1.0 : 0.0;
 			case MENUHELPER_ITEM_STEPPER:
-				return std::clamp(std::round(a_value), 0.0F, static_cast<float>(options.size() - 1));
+			case MENUHELPER_ITEM_DROPDOWN:
+				return std::clamp(std::round(a_value), 0.0, static_cast<double>(options.size() - 1));
 			case MENUHELPER_ITEM_SLIDER:
 				{
 					const auto steps = std::round((std::clamp(a_value, min, max) - min) / step);
 					return std::min(min + steps * step, max);
 				}
+			case MENUHELPER_ITEM_HOTKEY:
+			case MENUHELPER_ITEM_COLOR:
+				return std::clamp(std::round(a_value), 0.0, static_cast<double>(std::numeric_limits<std::uint32_t>::max()));
 			default:
-				return 0.0F;
+				return 0.0;
 		}
 	}
 
-	bool Menu::UsesOptionsLayout() const
+	bool Item::HasValue() const
 	{
-		return std::ranges::any_of(items, [](const Item& a_item) {
+		return IsValueType(type);
+	}
+
+	std::uint32_t Item::Decimals() const
+	{
+		if (decimals > 0) {
+			return decimals;
+		}
+		double scale = 1.0;
+		for (std::uint32_t digits = 0; digits < kMaxAutoDecimals; ++digits, scale *= 10.0) {
+			if (IsWhole(step * scale) && IsWhole(min * scale)) {
+				return digits;
+			}
+		}
+		return kMaxAutoDecimals;
+	}
+
+	Layout Menu::GetLayout() const
+	{
+		if (kind == MENUHELPER_MENU_PAGES) {
+			return Layout::kPages;
+		}
+		const bool options = std::ranges::any_of(items, [](const Item& a_item) {
+			if (!a_item.Visible() || a_item.type == MENUHELPER_ITEM_HEADER || a_item.type == MENUHELPER_ITEM_TEXT) {
+				return false;
+			}
 			return a_item.type != MENUHELPER_ITEM_BUTTON || !a_item.description.empty();
 		});
+		return options ? Layout::kOptions : Layout::kList;
+	}
+
+	bool Menu::HasDefaults() const
+	{
+		return !internal && std::ranges::any_of(items, [](const Item& a_item) { return a_item.Visible() && a_item.HasValue(); });
 	}
 
 	Registry& Registry::Get()
 	{
 		static Registry singleton;
 		return singleton;
+	}
+
+	std::optional<Item> Registry::MakeItem(const MenuHelper_ItemDesc& a_desc)
+	{
+		if (!IsValidItem(a_desc)) {
+			return std::nullopt;
+		}
+		Item item;
+		item.type = a_desc.type;
+		item.flags = a_desc.flags;
+		item.label = a_desc.label;
+		item.description = a_desc.description ? a_desc.description : "";
+		item.min = a_desc.min;
+		item.max = a_desc.max;
+		item.step = a_desc.step;
+		if (a_desc.type == MENUHELPER_ITEM_SLIDER) {
+			item.format = a_desc.format ? a_desc.format : "";
+			item.decimals = a_desc.decimals;
+		}
+		if (a_desc.type == MENUHELPER_ITEM_STEPPER || a_desc.type == MENUHELPER_ITEM_DROPDOWN) {
+			item.options.assign(a_desc.options, a_desc.options + a_desc.optionCount);
+		}
+		item.value = a_desc.value;
+		item.defaultValue = a_desc.value;
+		item.saveKey = a_desc.saveKey ? a_desc.saveKey : "";
+		item.submenu = a_desc.type == MENUHELPER_ITEM_BUTTON ? a_desc.submenu : MENUHELPER_INVALID_ID;
+		item.onChange = a_desc.onChange;
+		item.onSelect = a_desc.onSelect;
+		item.onHotkey = a_desc.type == MENUHELPER_ITEM_HOTKEY ? a_desc.onHotkey : nullptr;
+		item.user = a_desc.user;
+		if (a_desc.type == MENUHELPER_ITEM_TOPIC && a_desc.image) {
+			item.image = a_desc.image;
+			item.imageWidth = a_desc.imageWidth;
+			item.imageHeight = a_desc.imageHeight;
+		}
+		return item;
 	}
 
 	MenuHelper_EntryId Registry::AddEntry(const MenuHelper_EntryDesc& a_desc)
@@ -143,13 +248,32 @@ namespace MenuHelper
 		if (!IsValidModName(a_desc.modName)) {
 			return MENUHELPER_INVALID_ID;
 		}
+		if (a_desc.kind != MENUHELPER_MENU_ITEMS && a_desc.kind != MENUHELPER_MENU_PAGES) {
+			REX::WARN("rejected menu of {}: unknown kind {}", a_desc.modName, a_desc.kind);
+			return MENUHELPER_INVALID_ID;
+		}
 		const std::scoped_lock l{ _lock };
 		Menu menu;
 		menu.id = _nextId++;
 		menu.modName = a_desc.modName;
+		menu.kind = a_desc.kind;
 		menu.onOpen = a_desc.onOpen;
 		menu.onClose = a_desc.onClose;
+		menu.onReset = a_desc.onReset;
 		menu.user = a_desc.user;
+		_menus.push_back(std::move(menu));
+		return _menus.back().id;
+	}
+
+	MenuHelper_MenuId Registry::CreateInternalMenu(bool a_popup, MenuHelper_MenuCallback a_onClose)
+	{
+		const std::scoped_lock l{ _lock };
+		Menu menu;
+		menu.id = _nextId++;
+		menu.modName = kInternalModName;
+		menu.internal = true;
+		menu.popup = a_popup;
+		menu.onClose = a_onClose;
 		_menus.push_back(std::move(menu));
 		return _menus.back().id;
 	}
@@ -167,42 +291,30 @@ namespace MenuHelper
 		return it != _menus.end() ? std::optional{ *it } : std::nullopt;
 	}
 
-	MenuHelper_ItemId Registry::AddItem(MenuHelper_MenuId a_menu, const MenuHelper_ItemDesc& a_desc)
+	MenuHelper_ItemId Registry::AddItem(MenuHelper_MenuId a_menu, Item a_item)
 	{
-		if (!IsValidItem(a_desc)) {
-			return MENUHELPER_INVALID_ID;
-		}
 		const std::scoped_lock l{ _lock };
 		const auto menu = std::ranges::find(_menus, a_menu, &Menu::id);
 		if (menu == _menus.end()) {
 			return MENUHELPER_INVALID_ID;
 		}
-		Item item;
-		item.id = _nextId++;
-		item.menu = a_menu;
-		item.modName = menu->modName;
-		item.type = a_desc.type;
-		item.label = a_desc.label;
-		item.description = a_desc.description ? a_desc.description : "";
-		item.min = a_desc.min;
-		item.max = a_desc.max;
-		item.step = a_desc.step;
-		if (a_desc.type == MENUHELPER_ITEM_STEPPER) {
-			item.options.assign(a_desc.options, a_desc.options + a_desc.optionCount);
+		if ((menu->kind == MENUHELPER_MENU_PAGES) != (a_item.type == MENUHELPER_ITEM_TOPIC)) {
+			REX::WARN("rejected item \"{}\" of {}: pages menus hold topics only, and topics need a pages menu", a_item.label, menu->modName);
+			return MENUHELPER_INVALID_ID;
 		}
-		item.saveKey = a_desc.saveKey ? a_desc.saveKey : "";
-		const auto saved = item.saveKey.empty() ? std::nullopt : SavedValues::Load(item.modName, item.saveKey);
-		item.value = item.Clamp(saved.value_or(a_desc.value));
-		for (const auto& text : { item.label, item.description }) {
-			Translations::AddToTemplate(item.modName, text);
+		a_item.id = _nextId++;
+		a_item.menu = a_menu;
+		a_item.modName = menu->modName;
+		const auto saved = a_item.saveKey.empty() ? std::nullopt : SavedValues::Load(a_item.modName, a_item.saveKey);
+		a_item.value = a_item.Clamp(saved.value_or(a_item.value));
+		a_item.defaultValue = a_item.Clamp(a_item.defaultValue);
+		for (const auto& text : { a_item.label, a_item.description, a_item.format }) {
+			Translations::AddToTemplate(a_item.modName, text);
 		}
-		for (const auto& option : item.options) {
-			Translations::AddToTemplate(item.modName, option);
+		for (const auto& option : a_item.options) {
+			Translations::AddToTemplate(a_item.modName, option);
 		}
-		item.submenu = a_desc.type == MENUHELPER_ITEM_BUTTON ? a_desc.submenu : MENUHELPER_INVALID_ID;
-		item.onChange = a_desc.onChange;
-		item.user = a_desc.user;
-		menu->items.push_back(std::move(item));
+		menu->items.push_back(std::move(a_item));
 		return menu->items.back().id;
 	}
 
@@ -250,12 +362,19 @@ namespace MenuHelper
 		return UpdateItem(a_id, [&](Item& a_item) { a_item.enabled = a_enabled; });
 	}
 
-	MenuHelper_MenuId Registry::SetItemValue(MenuHelper_ItemId a_id, float a_value)
+	MenuHelper_MenuId Registry::SetItemVisible(MenuHelper_ItemId a_id, bool a_visible)
+	{
+		return UpdateItem(a_id, [&](Item& a_item) {
+			a_item.flags = a_visible ? a_item.flags & ~MENUHELPER_FLAG_HIDDEN : a_item.flags | MENUHELPER_FLAG_HIDDEN;
+		});
+	}
+
+	MenuHelper_MenuId Registry::SetItemValue(MenuHelper_ItemId a_id, double a_value, bool a_save)
 	{
 		std::optional<Item> saved;
 		const auto          menu = UpdateItem(a_id, [&](Item& a_item) {
 			a_item.value = a_item.Clamp(a_value);
-			if (!a_item.saveKey.empty()) {
+			if (a_save && !a_item.saveKey.empty()) {
 				saved = a_item;
 			}
 		});
@@ -275,6 +394,33 @@ namespace MenuHelper
 			}
 		}
 		return std::nullopt;
+	}
+
+	std::vector<MenuHelper_MenuId> Registry::SetSavedItemValues(std::string_view a_modName, std::string_view a_saveKey, double a_value)
+	{
+		const std::scoped_lock         l{ _lock };
+		std::vector<MenuHelper_MenuId> changed;
+		for (auto& menu : _menus) {
+			for (auto& item : menu.items) {
+				if (item.modName == a_modName && item.saveKey == a_saveKey) {
+					item.value = item.Clamp(a_value);
+					if (!std::ranges::contains(changed, menu.id)) {
+						changed.push_back(menu.id);
+					}
+				}
+			}
+		}
+		return changed;
+	}
+
+	std::vector<Item> Registry::Items(std::uint32_t a_type) const
+	{
+		const std::scoped_lock l{ _lock };
+		std::vector<Item>      result;
+		for (const auto& menu : _menus) {
+			std::ranges::copy_if(menu.items, std::back_inserter(result), [&](const Item& a_item) { return a_item.type == a_type; });
+		}
+		return result;
 	}
 
 	bool Registry::ReplaceItems(MenuHelper_MenuId a_menu, std::vector<Item> a_items)

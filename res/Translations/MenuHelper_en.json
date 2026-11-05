@@ -1,0 +1,19 @@
+{
+	// Shown next to a hotkey row while it waits for a key.
+	"$MenuHelper_HotkeyPrompt": "Press a key. Esc cancels, Backspace or Delete removes the hotkey.",
+	// Value of a hotkey row without a hotkey.
+	"$MenuHelper_HotkeyNone": "---",
+	// Name of a key the game has no name for. {code} is its number.
+	"$MenuHelper_KeyCode": "KEY {code}",
+	// Modifier keys, shown before the key as in "Shift+F".
+	"$MenuHelper_Shift": "Shift",
+	"$MenuHelper_Ctrl": "Ctrl",
+	"$MenuHelper_Alt": "Alt",
+	// Rows of the color editor.
+	"$MenuHelper_Red": "RED",
+	"$MenuHelper_Green": "GREEN",
+	"$MenuHelper_Blue": "BLUE",
+	"$MenuHelper_Alpha": "ALPHA",
+	// Decimal separator of slider values, for example "," in German.
+	"$MenuHelper_DecimalSeparator": "."
+}

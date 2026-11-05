@@ -1,0 +1,33 @@
+name: Wiki
+
+on:
+  push:
+    branches: [master]
+    paths: ['wiki/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The wiki is its own git repository. wiki/ replaces its content.
+      - name: Push wiki/ to the wiki
+        env:
+          WIKI_TOKEN: ${{ secrets.WIKI_TOKEN }}
+        run: |
+          git clone "https://${GITHUB_REPOSITORY_OWNER}:${WIKI_TOKEN}@github.com/${GITHUB_REPOSITORY}.wiki.git" wiki-repo
+          cd wiki-repo
+          git rm -rq --ignore-unmatch .
+          cp -r ../wiki/. .
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Wiki is up to date."
+            exit 0
+          fi
+          git -c user.name="${GITHUB_ACTOR}" -c user.email="${GITHUB_ACTOR}@users.noreply.github.com" commit -m "docs: update from ${GITHUB_SHA}"
+          git push

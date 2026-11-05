@@ -1,5 +1,7 @@
 #include "Config.h"
+#include "Hotkeys.h"
 #include "Injector.h"
+#include "JsonMenus.h"
 #include "Papyrus.h"
 #include "Translations.h"
 
@@ -10,6 +12,8 @@ namespace
 		switch (a_msg->type) {
 			case F4SE::MessagingInterface::kGameDataReady:
 				MenuHelper::Translations::OnGameReady();
+				MenuHelper::Hotkeys::Install();
+				MenuHelper::JsonMenus::Load();
 				break;
 			case F4SE::MessagingInterface::kPreLoadGame:
 			case F4SE::MessagingInterface::kNewGame:

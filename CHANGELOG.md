@@ -16,3 +16,16 @@ All notable changes to this project are documented here. The format follows [Kee
 - When the main or pause menu would need to scroll, mod entries move into one MODS entry. `sModsFolder` in `MenuHelper.ini` changes this.
 - `bExportTemplates` in `MenuHelper.ini` writes each mod's text to a file translators can fill in.
 - German translation for the example plugin.
+- Settings pages can have dropdowns, hotkeys, colors, headers and text rows.
+- Sliders show their value, with an optional unit format.
+- Settings pages have a DEFAULTS button that restores the original values.
+- Items can be hidden and report when they are selected.
+- Hotkeys set in a menu run their mod's action when pressed in game.
+- Mods can show vanilla message boxes, yes/no questions and HUD notifications.
+- Menus of text pages, like vanilla HELP, with optional DDS images.
+- Mods can add menus with a JSON file and no code.
+- Plugins and Papyrus can read and write saved values and hear about setting changes and actions.
+
+### Fixed
+
+- The game no longer crashes when the HUD color changes while a MenuHelper menu is open.
